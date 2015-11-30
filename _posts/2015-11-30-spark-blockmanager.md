@@ -26,7 +26,7 @@ excerpt: "MarkDown"
  
 ## 三、代码框
  
-```
+~~~
 	registerOrLookupEndpoint(
         name: String, endpointCreator: => RpcEndpoint):
       RpcEndpointRef = {
@@ -36,4 +36,4 @@ excerpt: "MarkDown"
       } else {
         RpcUtils.makeDriverRef(name, conf, rpcEnv)
       }
-```
+~~~
