@@ -27,8 +27,7 @@ excerpt: "MarkDown"
 ## 三、代码框
  
 ~~~
-	registerOrLookupEndpoint(
-        name: String, endpointCreator: => RpcEndpoint):
+ registerOrLookupEndpoint(name: String, endpointCreator: => RpcEndpoint):
       RpcEndpointRef = {
       if (isDriver) {
         logInfo("Registering " + name)
@@ -37,3 +36,10 @@ excerpt: "MarkDown"
         RpcUtils.makeDriverRef(name, conf, rpcEnv)
       }
 ~~~
+
+## 四、图片 
+![baidu](http://www.baidu.com/img/bdlogo.gif "百度logo")
+
+
+
+
