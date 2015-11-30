@@ -78,9 +78,9 @@ private[spark] class BlockManager(
   extends BlockDataManager with Logging
 ~~~
 
-MapOutputTracker: 跟踪一个Stage的map 输出位置
-ShuffleManager: shuffle 系统的提供的接口， SortShuffleManager 、HashShuffleManager 
-BlockTransferService: 用来传输Block数据，NettyBlockTransferService、 NioBlockTransferService
+MapOutputTracker: 跟踪一个Stage的map 输出位置  
+ShuffleManager: shuffle 系统的提供的接口， SortShuffleManager 、HashShuffleManager  
+BlockTransferService: 用来传输Block数据，NettyBlockTransferService、 NioBlockTransferService  
 
 
 
