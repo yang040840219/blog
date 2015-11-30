@@ -4,14 +4,14 @@ version: "1.0"
 permalink: /:year/:month/:day/:title/
 
 # 站点设置
-title: "Guovz"
-email: pzhuwjl@qq.com
-description: "王继林的个人博客"
+title: "明天"
+email: yxl040840219@126.com
+description: "明天的个人博客"
 keywords: "Guovz"
 
 # 用户信息设置
-weibo_username: Guovz
-github_username: guovz
+weibo_username: mingtian
+github_username: yxl040840219
 
 # Markdown设置
 kramdown:
@@ -23,8 +23,7 @@ kramdown:
 
 
 # 地址设置
-baseurl: "/jekyll-pithy"
-url: "http://127.0.0.1:4000"
+baseurl: "/blog"
 
 
 # 分页设置
