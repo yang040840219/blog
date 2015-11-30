@@ -26,9 +26,14 @@ excerpt: "MarkDown"
  
 ## 三、代码框
  
- ```
-  public static void main(String []args){    
-    System.out.println("hello")  
-  }
- ```
- 
+```
+sterOrLookupEndpoint(
+        name: String, endpointCreator: => RpcEndpoint):
+      RpcEndpointRef = {
+      if (isDriver) {
+        logInfo("Registering " + name)
+        rpcEnv.setupEndpoint(name, endpointCreator)
+      } else {
+        RpcUtils.makeDriverRef(name, conf, rpcEnv)
+      }e
+```
