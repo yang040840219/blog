@@ -1,4 +1,13 @@
-## spark BlockManager
+---
+layout: post
+title: Spark BlockManager
+tags:  [Spark]
+categories: [Spark]
+author: mingtian
+excerpt: "Spark BlockManager"
+---
+
+## Spark BlockManager
 
 ### 相关类
 
