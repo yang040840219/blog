@@ -27,7 +27,7 @@ excerpt: "MarkDown"
 ## 三、代码框
  
 ```
-sterOrLookupEndpoint(
+	registerOrLookupEndpoint(
         name: String, endpointCreator: => RpcEndpoint):
       RpcEndpointRef = {
       if (isDriver) {
@@ -35,5 +35,5 @@ sterOrLookupEndpoint(
         rpcEnv.setupEndpoint(name, endpointCreator)
       } else {
         RpcUtils.makeDriverRef(name, conf, rpcEnv)
-      }e
+      }
 ```
