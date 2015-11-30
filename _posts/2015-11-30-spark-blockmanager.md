@@ -43,20 +43,20 @@ BlockManager 分别在 Driver 和 Executor中在创建SparkEnv时创建
       serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
       numUsableCores)
 ~~~ 
-
 1. 创建 BlockManagerMaster 
 	registerOrLookupEndpoint方法如果在driver端执行，通过创建的new BlockManagerMasterEndpoint 的对象放到 RpcEnv 中返回ref,在Executor中，直接返回ref
 2. BlockManagerMaster 在创建时有 BlockManagerMasterEndpoint 后续的操作大部分通过此EndPoint完成
 3. 创建BlockManager
 	 参数executorId 为 driver
 	 
-* 在Executor端创建
-  ~~~
+* 在Executor端创建  
+
+~~~
      val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, port, cores, isLocal = false)
-  ~~~
- 1. 参数 isLocal = false, executorId 对应具体的Executor， 
- 2. 对应创建SparkEnv 时 isDriver=false, BlockManagerMaster 中包含的是BlockManagerMasterEndpoint的ref
+~~~
+1. 参数 isLocal = false, executorId 对应具体的Executor， 
+2. 对应创建SparkEnv 时 isDriver=false, BlockManagerMaster 中包含的是BlockManagerMasterEndpoint的ref
  
  
 	 
