@@ -11,18 +11,20 @@ excerpt: "Spark BlockManager"
 
 ### 相关类
 
-#### BlockManagerId 对应一个BlockManager,可能运行在Driver端，或者是Executor 端 new BlockManagerId(execId, host, port)
+* BlockManagerId 对应一个BlockManager,可能运行在Driver端，或者是Executor 端 new BlockManagerId(execId, host, port)
 
-##### BlockManagerInfo  用来对应 BlockManagerId 和 创建的BlockManager对应的RpcEndpoint的 ref ，有个updateBlockInfo方法
+* BlockManagerInfo  用来对应 BlockManagerId 和 创建的BlockManager对应的RpcEndpoint的 ref ，有个updateBlockInfo方法
 
-#### BlockId 定义一个block, 子类  RDDBlockId ，ShuffleBlockId，TaskResultBlockId
+* BlockId 定义一个block, 子类  RDDBlockId ，ShuffleBlockId，TaskResultBlockId
 
-#### BlockManagerMasterEndpoint 持有所有Executor中BlockManager的ref（通过BlockManagerInfo封装，定义Map类型blockManagerInfo 保存），block操作的方法，具体的逻辑实现（RegisterBlockManager，UpdateBlockInfo）
+* BlockManagerMasterEndpoint 持有所有Executor中BlockManager的ref（通过BlockManagerInfo封装，定义Map类型blockManagerInfo 保存），block操作的方法，具体的逻辑实现（RegisterBlockManager，UpdateBlockInfo）
 
-#### BlockManagerMaster 封装了对Block的操作，调用BlockManagerMasterEndpoint执行
+* BlockManagerSlaveEndpoint 和 BlockManagerMasterEndpoint 通信,在Executor端执行Driver 的命令
+
+* BlockManagerMaster 封装了对Block的操作，调用BlockManagerMasterEndpoint执行
 
 
-### 创建过程
+### 创建方式
 
 BlockManager 分别在 Driver 和 Executor中在创建SparkEnv时创建
 
@@ -57,8 +59,31 @@ BlockManager 分别在 Driver 和 Executor中在创建SparkEnv时创建
 ~~~
 1. 参数 isLocal = false, executorId 对应具体的Executor， 
 2. 对应创建SparkEnv 时 isDriver=false, BlockManagerMaster 中包含的是BlockManagerMasterEndpoint的ref
- 
- 
+
+### BlockManager 创建过程
+
+~~~
+private[spark] class BlockManager(
+    executorId: String,
+    rpcEnv: RpcEnv,
+    val master: BlockManagerMaster,
+    defaultSerializer: Serializer,
+    maxMemory: Long,
+    val conf: SparkConf,
+    mapOutputTracker: MapOutputTracker,
+    shuffleManager: ShuffleManager,
+    blockTransferService: BlockTransferService,
+    securityManager: SecurityManager,
+    numUsableCores: Int)
+  extends BlockDataManager with Logging
+~~~
+
+MapOutputTracker: 跟踪一个Stage的map 输出位置
+ShuffleManager: shuffle 系统的提供的接口， SortShuffleManager 、HashShuffleManager 
+BlockTransferService: 用来传输Block数据，NettyBlockTransferService、 NioBlockTransferService
+
+
+
 	 
 
 	
