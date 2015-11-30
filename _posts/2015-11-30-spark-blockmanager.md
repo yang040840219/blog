@@ -50,6 +50,7 @@ BlockManager 分别在 Driver 和 Executor中在创建SparkEnv时创建
 2. BlockManagerMaster 在创建时有 BlockManagerMasterEndpoint 后续的操作大部分通过此EndPoint完成
 3. 创建BlockManager
 	 参数executorId 为 driver
+4. 调用 initialize 方法  _env.blockManager.initialize(_applicationId)
 	 
 * 在Executor端创建  
 
@@ -59,6 +60,7 @@ BlockManager 分别在 Driver 和 Executor中在创建SparkEnv时创建
 ~~~
 1. 参数 isLocal = false, executorId 对应具体的Executor， 
 2. 对应创建SparkEnv 时 isDriver=false, BlockManagerMaster 中包含的是BlockManagerMasterEndpoint的ref
+3. 在Executor.scala 中 env.blockManager.initialize(conf.getAppId)
 
 ### BlockManager 创建过程
 
@@ -83,7 +85,33 @@ ShuffleManager: shuffle 系统的提供的接口， SortShuffleManager 、HashSh
 BlockTransferService: 用来传输Block数据，NettyBlockTransferService、 NioBlockTransferService  
 
 
+~~~
+  def initialize(appId: String): Unit = {
+    blockTransferService.init(this)
+    shuffleClient.init(appId)
 
-	 
+    blockManagerId = BlockManagerId(
+      executorId, blockTransferService.hostName, blockTransferService.port)
+
+    shuffleServerId = if (externalShuffleServiceEnabled) {
+      BlockManagerId(executorId, blockTransferService.hostName, externalShuffleServicePort)
+    } else {
+      blockManagerId
+    }
+
+    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
+
+    // Register Executors' configuration with the local shuffle service, if one should exist.
+    if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
+      registerWithExternalShuffleServer()
+    }
+  }
+~~~
+
+初始化 ShuffleClient:ExternalShuffleClient , BlockTransferService , master
+为 BlockManagerMaster, registerBlockManager 方法把创建的BlockManagerSlaveEndpoint注册到 
+BlockManagerMasterEndpoint上,事件名称为 RegisterBlockManager, BlockManagerMasterEndpoint接收到事件后,调用register(blockManagerId, maxMemSize, slaveEndpoint) 方法, 创建和 salveEndpoint 对应的 BlockManagerInfo
+
+
 
 	
