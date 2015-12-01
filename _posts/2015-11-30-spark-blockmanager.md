@@ -62,7 +62,7 @@ BlockManager 分别在 Driver 和 Executor中在创建SparkEnv时创建
 2. 对应创建SparkEnv 时 isDriver=false, BlockManagerMaster 中包含的是BlockManagerMasterEndpoint的ref
 3. 在Executor.scala 中 env.blockManager.initialize(conf.getAppId)
 
-### BlockManager 创建过程
+### BlockManager 初始化
 
 ~~~
 private[spark] class BlockManager(
@@ -111,6 +111,12 @@ BlockTransferService: 用来传输Block数据，NettyBlockTransferService、 Nio
 初始化 ShuffleClient:ExternalShuffleClient , BlockTransferService , master
 为 BlockManagerMaster, registerBlockManager 方法把创建的BlockManagerSlaveEndpoint注册到 
 BlockManagerMasterEndpoint上,事件名称为 RegisterBlockManager, BlockManagerMasterEndpoint接收到事件后,调用register(blockManagerId, maxMemSize, slaveEndpoint) 方法, 创建和 salveEndpoint 对应的 BlockManagerInfo
+
+
+### 调用过程
+
+> http://jerryshao.me/architecture/2013/10/08/spark-storage-module-analysis/
+
 
 
 
