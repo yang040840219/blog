@@ -57,4 +57,7 @@ shuffleBlockResolver 为 IndexShuffleBlockResolver 数据写入到 SPARK_LOCAL_D
 > eg: /Users/yxl/data/spark.dir/spark-1d3ddd71-0bf8-498e-bef9-514f9aaa7bbf/blockmgr-cafc764d-92f2-4fa3-bc2a-c0facfb4be03/38/shuffle_0_4_0.data
 
 
+### ResultTask
+
+
 
