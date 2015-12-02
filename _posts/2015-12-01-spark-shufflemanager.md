@@ -87,6 +87,7 @@ shuffleBlockResolver 为 IndexShuffleBlockResolver 数据写入到 SPARK_LOCAL_D
 ## ResultTask
 
 ResultTask 的 rdd 可以是 ShuffledRDD , 在 执行 runTask 方法时，会直接调用
+
 ~~~
   func(context, rdd.iterator(partition, context))
 ~~~
