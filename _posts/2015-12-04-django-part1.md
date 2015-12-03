@@ -46,7 +46,9 @@ excerpt: "django"
  
  #### 定义 model  
  
+ 
  ~~~
+ 
  class Author(models.Model):
     class Meta:
          verbose_name_plural='作者信息' # 显示在菜单中的名称 admin
