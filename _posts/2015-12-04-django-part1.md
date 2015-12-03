@@ -42,9 +42,9 @@ excerpt: "django"
  > django shell: python manage.py shell
  
  
- ### django models
+ ### django models  
  
- #### 定义 model
+ #### 定义 model  
  
  ~~~
  class Author(models.Model):
@@ -118,4 +118,8 @@ excerpt: "django"
 
 *django making queries*  
 <https://docs.djangoproject.com/en/1.9/topics/db/queries>
+
+#### Managers
+
+
  
