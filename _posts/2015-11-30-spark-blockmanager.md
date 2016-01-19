@@ -133,22 +133,22 @@ BlockManagerMasterEndpoint上,事件名称为 RegisterBlockManager, BlockManager
 考虑ShuffleMapTask 
     
 ~~~
-      val manager = SparkEnv.get.shuffleManager
+ val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
       writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
 ~~~
     
-    writer 为 SortShuffleWriter 
+writer 为 SortShuffleWriter 
     
 ~~~
-      val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
+  val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
       shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
 ~~~
    
-    shuffleBlockResolver 为 IndexShuffleBlockResolver  调用 ExternalSorter 中的 writePartitionedFile 
+shuffleBlockResolver 为 IndexShuffleBlockResolver  调用 ExternalSorter 中的 writePartitionedFile 
     
 ~~~
-      val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
+val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
             context.taskMetrics.shuffleWriteMetrics.get)
 ~~~
     
@@ -157,7 +157,7 @@ BlockManagerMasterEndpoint上,事件名称为 RegisterBlockManager, BlockManager
 另外是直接调用 BlockManager 中的 putBytes、putArray 方法 在 BlockManager 内部统一使用 doPut 方法
     
 ~~~
-     private def doPut(
+private def doPut(
       blockId: BlockId,
       data: BlockValues,
       level: StorageLevel,
