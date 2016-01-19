@@ -115,13 +115,14 @@ excerpt: "django"
  * Book.objects.all().filter(title__startswith='book1')
  * Book.objects.all().filter(title__constains='book1')
  * Book.objects.get(Q(publisher_name='pub1'))
- * Book.objects.filter(Q(publisher__name='pub1')|Q(publisher__name='pub2'))
-
-
+ * Book.objects.filter(Q(publisher__name='pub1')|Q(publisher__name='pub2'))  
+ 
+ 
 *django making queries*  
 <https://docs.djangoproject.com/en/1.9/topics/db/queries>
 
 #### Managers
 
+<https://docs.djangoproject.com/en/1.9/topics/db/managers>
 
  

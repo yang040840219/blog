@@ -13,9 +13,9 @@ excerpt: "Spark BlockManager"
 
 * BlockManagerId 对应一个BlockManager,可能运行在Driver端，或者是Executor 端 new BlockManagerId(execId, host, port)
 
-* BlockManagerInfo  用来对应 BlockManagerId 和 创建的BlockManager对应的RpcEndpoint的 ref ，有个updateBlockInfo方法
+* BlockManagerInfo  用来对应 BlockManagerId 和 创建的BlockManager对应的RpcEndpoint的 ref ，有个updateBlockInfo方法，在BlockManagerMasterEndpoint 端 用来更新各个 Block 的信息(BlockInfo)
 
-* BlockId 定义一个block, 子类  RDDBlockId ，ShuffleBlockId，TaskResultBlockId
+* BlockId 定义一个block 表示一个文件, 子类  RDDBlockId ，ShuffleBlockId，TaskResultBlockId(Task计算完成结果超过设置的值，先保存在本地) 保存或者读取时的标识
 
 * BlockManagerMasterEndpoint 持有所有Executor中BlockManager的ref（通过BlockManagerInfo封装，定义Map类型blockManagerInfo 保存），block操作的方法，具体的逻辑实现（RegisterBlockManager，UpdateBlockInfo）
 
@@ -23,6 +23,17 @@ excerpt: "Spark BlockManager"
 
 * BlockManagerMaster 封装了对Block的操作，调用BlockManagerMasterEndpoint执行
 
+* BlockInfo  Block 的 Storage Level
+
+* BlockManager  Block 存储和读取的调用接口
+
+* BlockResult 用来包装根据BlockId 从 MemoryStore/DiskStore 获取的数据结果
+
+* ManagedBuffer  子类  FileSegmentManagedBuffer, NioManagedBuffer, NettyManagedBuffer
+
+* BlockStore   子类 DiskStore, ExternalBlockStore, MemoryStore
+
+                       
 
 ### 创建方式
 
@@ -117,7 +128,47 @@ BlockManagerMasterEndpoint上,事件名称为 RegisterBlockManager, BlockManager
 
 > http://jerryshao.me/architecture/2013/10/08/spark-storage-module-analysis/
 
+1. 写入过程
+
+    考虑ShuffleMapTask 
+    
+    ~~~
+      val manager = SparkEnv.get.shuffleManager
+      writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
+      writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
+    ~~~
+    
+    writer 为 SortShuffleWriter 
+    
+    ~~~
+      val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
+      shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
+    ~~~
+   
+    shuffleBlockResolver 为 IndexShuffleBlockResolver  调用 ExternalSorter 中的 writePartitionedFile 
+    
+    ~~~
+      val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
+            context.taskMetrics.shuffleWriteMetrics.get)
+    ~~~
+    
+    调用 blockManager 中的 方法写入数据，blockId 标识写入的数据
+    
+    另外是直接调用 BlockManager 中的 putBytes、putArray 方法 在 BlockManager 内部统一使用 doPut 方法
+    
+    ~~~
+     private def doPut(
+      blockId: BlockId,
+      data: BlockValues,
+      level: StorageLevel,
+      tellMaster: Boolean = true,
+      effectiveStorageLevel: Option[StorageLevel] = None)
+    : Seq[(BlockId, BlockStatus)]
+    ~~~
+    
+    
+2. 读取过程
+   
 
 
 
-	
