@@ -126,8 +126,6 @@ BlockManagerMasterEndpoint上,事件名称为 RegisterBlockManager, BlockManager
 
 ### 调用过程
 
-> http://jerryshao.me/architecture/2013/10/08/spark-storage-module-analysis/
-
 1. 写入过程
 
 考虑ShuffleMapTask 
@@ -168,7 +166,30 @@ private def doPut(
     
     
 2. 读取过程
-   
+  考虑 ShuffledRDD 的 compute 方法 
+  
+~~~
+  SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1, context)
+      .read()
+      .asInstanceOf[Iterator[(K, C)]]
+~~~
+
+调用 HashShuffleReader 的 read() 方法
+
+~~~
+ val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context, ser)
+~~~
+
+数据读取 通过 ShuffleBlockFetcherIterator  读取远程数据 通过 ShuffleClient  读取本地数据通过 BlockManager
+
+读取本地 val buf = blockManager.getBlockData(blockId) 在 BlockManager 内部使用 doGetLocal 方法
+
+~~~
+ private def doGetLocal(blockId: BlockId, asBlockResult: Boolean): Option[Any] 
+~~~
+
+
+  
 
 
 
