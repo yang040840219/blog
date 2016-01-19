@@ -130,7 +130,7 @@ BlockManagerMasterEndpoint上,事件名称为 RegisterBlockManager, BlockManager
 
 1. 写入过程
 
-    考虑ShuffleMapTask 
+考虑ShuffleMapTask 
     
 ~~~
       val manager = SparkEnv.get.shuffleManager
@@ -152,9 +152,9 @@ BlockManagerMasterEndpoint上,事件名称为 RegisterBlockManager, BlockManager
             context.taskMetrics.shuffleWriteMetrics.get)
 ~~~
     
-    调用 blockManager 中的 方法写入数据，blockId 标识写入的数据
-    
-    另外是直接调用 BlockManager 中的 putBytes、putArray 方法 在 BlockManager 内部统一使用 doPut 方法
+调用 blockManager 中的 方法写入数据，blockId 标识写入的数据
+
+另外是直接调用 BlockManager 中的 putBytes、putArray 方法 在 BlockManager 内部统一使用 doPut 方法
     
 ~~~
      private def doPut(
