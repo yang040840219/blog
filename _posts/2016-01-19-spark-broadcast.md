@@ -64,4 +64,17 @@ SparkContext
 
 TorrentBroadcast
 
+~~~
+ SparkEnv.get.blockManager.getLocal(broadcastId).map(_.data.next()) 
+~~~
 
+从本地获取
+
+
+~~~
+ val blocks = readBlocks()
+  val obj = TorrentBroadcast.unBlockifyObject[T](
+            blocks, SparkEnv.get.serializer, compressionCodec)
+~~~
+
+本地获取不到后 ， 会调用 readBlocks , 按照 block 获取 Broadcast ，可以从 本地或者从远程 ， 最后把 blocks 转换成  value 
