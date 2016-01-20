@@ -19,11 +19,11 @@ excerpt: "Spark BlockManager"
 
 * BlockManagerMasterEndpoint 持有所有Executor中BlockManager的ref（通过BlockManagerInfo封装，定义Map类型blockManagerInfo 保存），block操作的方法，具体的逻辑实现（RegisterBlockManager，UpdateBlockInfo）
 
-* BlockManagerSlaveEndpoint 和 BlockManagerMasterEndpoint 通信,在Executor端执行Driver 的命令
+* BlockManagerSlaveEndpoint 和 BlockManagerMasterEndpoint 通信,最后通过 BlockManager 对 block 进行操作 每个 BlockManager 都会创建一个 BlockManagerSlaveEndpoint
 
 * BlockManagerMaster 封装了对Block的操作，调用BlockManagerMasterEndpoint执行
 
-* BlockInfo  Block 的 Storage Level
+* BlockInfo  Block 的 Storage Level 信息
 
 * BlockManager  Block 存储和读取的调用接口
 
@@ -32,6 +32,22 @@ excerpt: "Spark BlockManager"
 * ManagedBuffer  子类  FileSegmentManagedBuffer, NioManagedBuffer, NettyManagedBuffer
 
 * BlockStore   子类 DiskStore, ExternalBlockStore, MemoryStore
+
+ > 在 Driver 端 ：
+
+   BlockManagerMaster  <br/>
+   BlockManagerMasterEndpoint <br/>
+   BlockManager  <br/>
+   BlockManagerSlaveEndpoint <br/>
+   
+  
+ > 在 Executor 端：
+
+  BlockManagerMaster <br/>
+  BlockManagerMasterEndpoint 的 Ref <br/>
+  BlockManager <br/>
+  BlockManagerSlaveEndpoint  <br/>
+
 
                        
 
@@ -59,8 +75,8 @@ BlockManager 分别在 Driver 和 Executor中在创建SparkEnv时创建
 1. 创建 BlockManagerMaster 
 	registerOrLookupEndpoint方法如果在driver端执行，通过创建的new BlockManagerMasterEndpoint 的对象放到 RpcEnv 中返回ref,在Executor中，直接返回ref
 2. BlockManagerMaster 在创建时有 BlockManagerMasterEndpoint 后续的操作大部分通过此EndPoint完成
-3. 创建BlockManager
-	 参数executorId 为 driver
+3. 创建BlockManager 参数executorId 为 driver,  会创建  BlockManagerSlaveEndpoint 然后调用 BlockManagerMaster 的 registerBlockManager 注册到  BlockManagerMaster 上, 然后通过 BlockManagerMasterEndpoint 把 创建的BlockManager 注册到 Driver 端的 BlockManagerMasterEndpoint 上
+	 
 4. 调用 initialize 方法  _env.blockManager.initialize(_applicationId)
 	 
 * 在Executor端创建  
