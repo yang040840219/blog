@@ -125,3 +125,8 @@ override def compute(split: Partition, context: TaskContext): Iterator[(K, C)] =
   }
 ```
 
+
+
+![Alt text](/blog/assets/images/posts/map.jpeg.001.jpeg)
+
+
