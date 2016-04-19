@@ -7,6 +7,8 @@ author: mingtian
 excerpt: "Spark Streaming"
 ---
 
+
+
 ### Spark Streaming
 
 ```
@@ -16,6 +18,9 @@ excerpt: "Spark Streaming"
   ssc.start()
   ssc.awaitTermination()
 ```
+
+![Spark Streaming 运行](/blog/assets/images/post/spark-streaming/spark-streaming.003.jpeg)
+
 
 #### StreamingContext
 
@@ -77,11 +82,19 @@ OutputStream 是在有action 操作时产生的
 
 #### ReceiverTracker
 
+![ReceiverTracker](/blog/assets/images/post/spark-streaming/spark-streaming.008.jpeg)
+
 管理 添加到 DStreamGraph 中 继承ReceiverInputDStream类的所有 InputDStream 如 KafkaInputDStream, 创建用来启动所有Receiver(每个InputStream 都有自己的Receiver)的 ReceiverLauncher 类,其 start 方法中 receiverExecutor.start() , ReceiverExecutor 会在单独
-的线程中执行 startReceivers() 。 同时创建 ReceiverTrackerEndpoint 同在各个Worker 上创建的Receiver 进行通信。
+的线程中执行 startReceivers() 。 同时创建 ReceiverTrackerEndpoint 同在各个Worker 上创建的Receiver 进行通信。创建ReceiverTrackerEndpoint 用来用来管理所有的Receiver、接收Receiver发送的数据
+
+![ReliableKafkaReceiver](/blog/assets/images/post/spark-streaming/spark-streaming.009.jpeg)
+
+![ReceiverSupervisor](/blog/assets/images/post/spark-streaming/spark-streaming.010.jpeg)
 
 
 #### JobGenerator
+
+![JobGenerator](/blog/assets/images/post/spark-streaming/spark-streaming.004.jpeg)
 
 调用EventLoop 定时的生成 job(GenerateJobs),通过 processEvent 来处理。同时还有 ClearMetadata、DoCheckpoint、ClearCheckpointData等事件。
 生成job 
@@ -181,13 +194,4 @@ private class JobHandler(job: Job) extends Runnable with Logging {
 
 
 
-
-* StreamingContext.start() 
-   
-* Scheduler.start() 
-
-      * ReceiverTracker.start()  创建ReceiverTrackerEndpoint 用来用来管理所有的Receiver、接收Receiver发送的数据										ReceiverExecutor.start() 启动所有的Receiver在各个worker上开始接收数据
-	      
-	  * JobGenerator.start()    如果没有 checkpoint 执行 startFirstTime() 启动 graph.start(startTime - graph.batchDuration)
-	  								graph 启动所有的InputStream、OutputStream 
 
