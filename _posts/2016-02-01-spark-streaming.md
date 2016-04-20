@@ -144,16 +144,16 @@ ReceiverSupervisor 的 start 方法 会调用自身的onStart() 实现类 Receiv
 ```
 ReceiverSupervisorImpl 
       |
-      |					ReceiverSupervisor            ReceiverSupervisorImpl
-      |							|                               |
-      |							|                               |                        KafkaReceiver
-    start() -------------   onStart() -----------------    onStart()                        |
-    								|                                                             |
-    								|                     | ------ receiver.onStart() ------  onStart()
-    						startReceiver() ------------| 
-    		                                          | ------ onReceiverStart()												                           |
-    		                                                         |
-    		                                                ReceiverSupervisorImpl 
+      |		             ReceiverSupervisorImpl
+      |  ReceiverSupervisor      |
+      |			|               |                      KafkaReceiver
+    start()----onStart() ---onStart()                        |
+    								|                              |
+    								|              | --- receiver.onStart() 
+    						startReceiver() ------| 
+    		                                   | --- onReceiverStart()												                    |
+    		                                                  |
+    		                                       ReceiverSupervisorImpl 
     							  
 ```
 
