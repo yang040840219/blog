@@ -35,6 +35,8 @@ excerpt: "Spark Streaming"
 
 #### ReceiverInputDStream
 
+ 所有继承该类的 InputDStream 都是要有对应的Receiver 实现，后续会运行在 Work 上的。
+ 定义 从 Blocks 转换为 BlockRDD 的 compute 方法
 
 
 #### DStreamGraph
@@ -131,7 +133,7 @@ ReceiverLauncher 会在新线程中调用 startReceivers() , 把 InputStreams �
 				|
 		KafkaReceiver
 		
-Receiver 中 保存数据, 启动, 停止 都是调用 ReceiverSupervisor 中的方法
+Receiver 中 保存数据, 启动, 停止 都是调用 ReceiverSupervisor 中的方法。 在ReceiverSupervisor 中 receiver.attachExecutor(this), 让Receiver 持有  ReceiverSupervisor 的引用。
 		
 		ReceiverSupervisor
 				|
@@ -139,7 +141,7 @@ Receiver 中 保存数据, 启动, 停止 都是调用 ReceiverSupervisor 中的
 
 
 ReceiverSupervisor 的 start 方法 会调用自身的onStart() 实现类 ReceiverSupervisorImpl在 onStart() 中实例化 BlockGenerator 类, 然后调用 startReceiver() 继而调用 具体 Receiver(InputDStream 对应的Receiver (KafaInputDStream 对应的是KafkaReceiver 通过 getReceiver() 创建)) 的 onStart() , 最后调用 onReceiverStart 把 启动的Receiver 注册到 ReceiverTrackerEndpoint 上。
-
+Receiver 启动后开始收集数据,调用 store() 方法保存收集到的数据
 
 ```
 ReceiverSupervisorImpl 
@@ -158,6 +160,32 @@ ReceiverSupervisorImpl
 ```
 
 
+保存数据流程
+
+```
+
+ Receiver.store(bytes: ByteBuffer)
+      |
+      |
+ ReceiverSupervisorImpl.pushBytes
+  	   |
+  	   |
+ ReceiverSupervisorImpl.pushAndReportBlock 	   |
+ 	   |
+ //  具体的执行保存数据逻辑 BlockManagerBasedBlockHandler
+ //  和 WriteAheadLogBasedBlockHandler 两个实现类
+ ReceivedBlockHandler.storeBlock  
+ 	   |
+ 	   |
+ // 发送消息给 ReceiverTrakcer 
+ trackerEndpoint.askWithRetry[Boolean](AddBlock(blockInfo))  	   |
+ 	   |
+ ReceiverTracker.addBlock
+  	   |
+  	   |
+ ReceivedBlockTracker.addBlock	
+ 
+```
 
 
 
@@ -165,7 +193,6 @@ ReceiverSupervisorImpl
 #### ReceivedBlockTracker
 
 在 ReceiverTracker 中创建，用来跟踪接收到的Blocks, 然后根据 jobScheduler.receiverTracker.allocateBlocksToBatch(time) 的调用 把接收到的block分成一批，内部操作都是基于 WAL 的
-
 
 
 #### JobGenerator
@@ -212,11 +239,15 @@ private def generateJobs(time: Time) {
   }
 ```
 
-1.调用 ReceiverTracker 中的 allocateBlockToBatch 方法，把当前所有的Stream Id 对应的 ReceiveBlockInfo 信息汇总到一起，封装成 AllocatedBlocks 返回，并且写日志。 数据保存在 timeToAllocatedBlocks：HashMap 中，每个Stream Id 对应 batchtime 内的 ReceiverBlockInfo 可以通过  ReceiverTracker 中的 getBlocksOfBatch(time) 和 getBlocksOfBatchAndStream(time,stream) 获取
+1.调用 ReceiverTracker 中的 allocateBlockToBatch 方法，把当前所有的Stream Id 对应的 ReceiveBlockInfo 信息汇总到一起，封装成 AllocatedBlocks 返回（具体的实现是 ReceiverBlockTracker 中的allocateBlocksToBatch()），并且写日志。 数据保存在 timeToAllocatedBlocks:HashMap 中，每个Stream Id 对应 batchtime 内的 ReceiverBlockInfo 可以通过  ReceiverTracker 中的 getBlocksOfBatch(time) 和 getBlocksOfBatchAndStream(time,stream) 获取
 
 ```
  writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks)) 
 ```
+
+如何把获取到的Blocks 转换成 RDD ?
+
+
 
 2.graph.generateJobs(time) 针对每个注册的 OutputStream 执行 DStream 的子类会重写这个方法，比如 ForEachDStream 生成一个job
 
