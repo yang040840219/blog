@@ -15,6 +15,7 @@ excerpt: "Spark Streaming"
   val ssc = new StreamingContext(sparkConf, Seconds(2))
   ssc.checkpoint("checkpoint")
   val lines = KafkaUtils.createStream(ssc, zkQuorum, group, topicMap).map(_._2)
+  lines.print()
   ssc.start()
   ssc.awaitTermination()
 ```
@@ -46,11 +47,12 @@ newGraph
 StreamingContext 初始化 DStreamGraph 时 会传递一个 batchDuration。
 DStreamGraph 持有所有的 InputStream 和 OutputStream 
 
-InputStream 是在代码, 中创建 InputDStream的子类时在父类调用 ssc.graph.addInputStream(this) 时 添加的
+InputStream 是在代码, 中创建 InputDStream的子类时在父类调用 ssc.graph.addInputStream(this) 时 添加的。
 
 ```
   val lines = ssc.textFileStream(directory)
   
+  // 最后创建一个 KafkaInputDStream 在 父类中添加到 DStreamGraph 中
   val lines = KafkaUtils.createStream(ssc, zkQuorum, group, topicMap).map(_._2)
 ```
 
@@ -69,6 +71,9 @@ OutputStream 是在有action 操作时产生的
 
 ```
 
+foreachRDD 说明：
+     	
+
 
 
 #### JobScheduler
@@ -84,12 +89,83 @@ OutputStream 是在有action 操作时产生的
 
 ![ReceiverTracker](/blog/assets/images/post/spark-streaming/spark-streaming.008.jpeg)
 
-管理 添加到 DStreamGraph 中 继承ReceiverInputDStream类的所有 InputDStream 如 KafkaInputDStream, 创建用来启动所有Receiver(每个InputStream 都有自己的Receiver)的 ReceiverLauncher 类,其 start 方法中 receiverExecutor.start() , ReceiverExecutor 会在单独
-的线程中执行 startReceivers() 。 同时创建 ReceiverTrackerEndpoint 同在各个Worker 上创建的Receiver 进行通信。创建ReceiverTrackerEndpoint 用来用来管理所有的Receiver、接收Receiver发送的数据
+过滤添加到 DStreamGraph 中 继承ReceiverInputDStream类的所有 InputDStream 如 KafkaInputDStream, 创建用来启动所有Receiver(每个InputStream 都有自己的Receiver)的 ReceiverLauncher 类,其 start 方法中 receiverExecutor.start() , ReceiverExecutor 会在单独
+的线程中执行 startReceivers() 。 同时创建 ReceiverTrackerEndpoint 同在各个Worker 上创建的Receiver 进行通信。创建ReceiverTrackerEndpoint 用来用来管理所有的Receiver 用 ReceiverInfo 类 来表示所有注册到 ReceiverTracker 中的 Receiver 、接收Receiver发送的数据
 
 ![ReliableKafkaReceiver](/blog/assets/images/post/spark-streaming/spark-streaming.009.jpeg)
 
 ![ReceiverSupervisor](/blog/assets/images/post/spark-streaming/spark-streaming.010.jpeg)
+
+
+从 ReceiverTracker 的 start() 开始
+
+```
+ if (!receiverInputStreams.isEmpty) {
+      endpoint = ssc.env.rpcEnv.setupEndpoint(
+        "ReceiverTracker", new ReceiverTrackerEndpoint(ssc.env.rpcEnv))
+      if (!skipReceiverLaunch) receiverExecutor.start()
+      logInfo("ReceiverTracker started")
+    }
+```
+
+启动 ReceiverTrackerEndpoint 用来同后续启动的Receiver 通信 ，处理 RegisterReceiver、AddBlock、DeregisterReceiver 等事件
+ReceiverLauncher 会在新线程中调用 startReceivers() , 把 InputStreams 封装成RDD 在 work 上执行，启动 ReceiverSupervisor
+调用 ReceiverSupervisor 的 start 方法
+
+```
+     // 在work的Executor上运行的 Receiver 的具体函数，最后调用 ReceiverSupervisorImpl 的 start 方法
+      val startReceiver = (iterator: Iterator[Receiver[_]]) => {
+        if (!iterator.hasNext) {
+          throw new SparkException(
+            "Could not start receiver as object not found.")
+        }
+        val receiver = iterator.next()
+        val supervisor = new ReceiverSupervisorImpl(
+          receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
+        supervisor.start()
+        supervisor.awaitTermination()
+      }
+```
+
+			Receiver
+				|
+		KafkaReceiver
+		
+Receiver 中 保存数据, 启动, 停止 都是调用 ReceiverSupervisor 中的方法
+		
+		ReceiverSupervisor
+				|
+	 ReceiverSupervisorImpl
+
+
+ReceiverSupervisor 的 start 方法 会调用自身的onStart() 实现类 ReceiverSupervisorImpl在 onStart() 中实例化 BlockGenerator 类, 然后调用 startReceiver() 继而调用 具体 Receiver(InputDStream 对应的Receiver (KafaInputDStream 对应的是KafkaReceiver 通过 getReceiver() 创建)) 的 onStart() , 最后调用 onReceiverStart 把 启动的Receiver 注册到 ReceiverTrackerEndpoint 上。
+
+
+```
+ReceiverSupervisorImpl 
+      |
+      |					ReceiverSupervisor            ReceiverSupervisorImpl
+      |							|                               |
+      |							|                               |                        KafkaReceiver
+    start() -------------   onStart() -----------------    onStart()                        |
+    								|                                                             |
+    								|                     | ------ receiver.onStart() ------  onStart()
+    						startReceiver() ------------| 
+    		                                          | ------ onReceiverStart()												                           |
+    		                                                         |
+    		                                                ReceiverSupervisorImpl 
+    							  
+```
+
+
+
+
+
+
+#### ReceivedBlockTracker
+
+在 ReceiverTracker 中创建，用来跟踪接收到的Blocks, 然后根据 jobScheduler.receiverTracker.allocateBlocksToBatch(time) 的调用 把接收到的block分成一批，内部操作都是基于 WAL 的
+
 
 
 #### JobGenerator
@@ -136,13 +212,13 @@ private def generateJobs(time: Time) {
   }
 ```
 
-1. 调用 ReceiverTracker 中的 allocateBlockToBatch 方法，把当前所有的Stream Id 对应的 ReceiveBlockInfo 信息汇总到一起，封装成 AllocatedBlocks 返回，并且写日志。 数据保存在 timeToAllocatedBlocks：HashMap 中，每个Stream Id 对应 batchtime 内的 ReceiverBlockInfo 可以通过  ReceiverTracker 中的 getBlocksOfBatch(time) 和 getBlocksOfBatchAndStream(time,stream) 获取
+1.调用 ReceiverTracker 中的 allocateBlockToBatch 方法，把当前所有的Stream Id 对应的 ReceiveBlockInfo 信息汇总到一起，封装成 AllocatedBlocks 返回，并且写日志。 数据保存在 timeToAllocatedBlocks：HashMap 中，每个Stream Id 对应 batchtime 内的 ReceiverBlockInfo 可以通过  ReceiverTracker 中的 getBlocksOfBatch(time) 和 getBlocksOfBatchAndStream(time,stream) 获取
 
 ```
  writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks)) 
 ```
 
-2. graph.generateJobs(time) 针对每个注册的 OutputStream 执行 DStream 的子类会重写这个方法，比如 ForEachDStream 生成一个job
+2.graph.generateJobs(time) 针对每个注册的 OutputStream 执行 DStream 的子类会重写这个方法，比如 ForEachDStream 生成一个job
 
 ```
  override def generateJob(time: Time): Option[Job] = {
@@ -159,7 +235,7 @@ private def generateJobs(time: Time) {
   
 ```
 
-3. 调用 jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToNumRecords)) 提交生成的jobs 到 JobScheduler 上。把 Job 封装成 JobHandler 在 JobExecutor(线程池) 中执行。 放入 JobScheduler 定义的eventloop 后,主要是用来记录job 运行的时间。最后调用 Job 的run 方法执行。
+3.调用 jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToNumRecords)) 提交生成的jobs 到 JobScheduler 上。把 Job 封装成 JobHandler 在 JobExecutor(线程池) 中执行。 放入 JobScheduler 定义的eventloop 后,主要是用来记录job 运行的时间。最后调用 Job 的run 方法执行。
 
 ```
 private class JobHandler(job: Job) extends Runnable with Logging {
@@ -184,13 +260,10 @@ private class JobHandler(job: Job) extends Runnable with Logging {
 
 ```
 
-
-#### ContextWaiter
-
 #### Checkpoint
 
 
-#### ReceivedBlockTracker
+
 
 
 
