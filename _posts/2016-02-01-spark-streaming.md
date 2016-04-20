@@ -8,6 +8,8 @@ excerpt: "Spark Streaming"
 ---
 
 
+spark.version : 1.4
+
 
 ### Spark Streaming
 
@@ -49,7 +51,18 @@ newGraph
 StreamingContext 初始化 DStreamGraph 时 会传递一个 batchDuration。
 DStreamGraph 持有所有的 InputStream 和 OutputStream 
 
-InputStream 是在代码, 中创建 InputDStream的子类时在父类调用 ssc.graph.addInputStream(this) 时 添加的。
+InputStream 是在代码, 中创建 InputDStream的子类时在父类调用 ssc.graph.addInputStream(this) 时 添加的。 同样每个 InputDStream 也会持有 DStreamGraph 的引用 
+
+```
+ def addInputStream(inputStream: InputDStream[_]) {
+    this.synchronized {
+      inputStream.setGraph(this)  // 具体的执行在DStream 中
+      inputStreams += inputStream
+    }
+  }
+
+```
+
 
 ```
   val lines = ssc.textFileStream(directory)
@@ -70,13 +83,33 @@ OutputStream 是在有action 操作时产生的
     ssc.graph.addOutputStream(this)
     this
   }
+  
+```
+
+foreachRDD 说明： 
+
+```
+def foreachRDD(foreachFunc: (RDD[T], Time) => Unit): Unit = ssc.withScope {
+    // because the DStream is reachable from the outer object here, and because
+    // DStreams can't be serialized with closures, we can't proactively check
+    // it for serializability and so we pass the optional false to SparkContext.clean
+    new ForEachDStream(this, context.sparkContext.clean(foreachFunc, false)).register()
+  }
 
 ```
 
-foreachRDD 说明：
-     	
+最终创建 ForEachDStream 注册到 DStreamGraph 的 OutputStream 上。 注意用法就好！
 
-
+```
+dstream.foreachRDD { rdd =>
+  rdd.foreachPartition { partitionOfRecords =>
+    // ConnectionPool is a static, lazily initialized pool of connections
+    val connection = ConnectionPool.getConnection()
+    partitionOfRecords.foreach(record => connection.send(record))
+    ConnectionPool.returnConnection(connection)  // return to the pool for future reuse
+  }
+}
+```
 
 #### JobScheduler
 
@@ -148,17 +181,18 @@ ReceiverSupervisorImpl
       |
       |		             ReceiverSupervisorImpl
       |  ReceiverSupervisor      |
-      |			|               |                      KafkaReceiver
-    start()----onStart() ---onStart()                        |
-    								|                              |
-    								|              | --- receiver.onStart() 
-    						startReceiver() ------| 
-    		                                   | --- onReceiverStart()												                    |
-    		                                                  |
-    		                                       ReceiverSupervisorImpl 
-    							  
+      |			|               |                      
+    start()----onStart() ---onStart() // 创建BlockGenerator                        
+    								|                              
+    								|             
+   ReceiverSupervisor -- startReceiver() 
+    		                    |
+    		                    |             							 ------------------			              |                 |
+    		        receiver.onStart()   onReceiverStart()  
+    		             |				       |
+    		             |                    |      
+    			   KafkaReceiver		ReceiverSupervisorImpl 
 ```
-
 
 保存数据流程
 
@@ -186,8 +220,6 @@ ReceiverSupervisorImpl
  ReceivedBlockTracker.addBlock	
  
 ```
-
-
 
 
 #### ReceivedBlockTracker
@@ -245,9 +277,6 @@ private def generateJobs(time: Time) {
  writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks)) 
 ```
 
-如何把获取到的Blocks 转换成 RDD ?
-
-
 
 2.graph.generateJobs(time) 针对每个注册的 OutputStream 执行 DStream 的子类会重写这个方法，比如 ForEachDStream 生成一个job
 
@@ -266,7 +295,39 @@ private def generateJobs(time: Time) {
   
 ```
 
-3.调用 jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToNumRecords)) 提交生成的jobs 到 JobScheduler 上。把 Job 封装成 JobHandler 在 JobExecutor(线程池) 中执行。 放入 JobScheduler 定义的eventloop 后,主要是用来记录job 运行的时间。最后调用 Job 的run 方法执行。
+```
+ val lines = ssc.textFileStream("/Users/yxl/data/spark-streaming")
+ val words = lines.flatMap(_.split(" "))
+ val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
+ wordCounts.print()
+```
+
+根据以上代码 生成的 DStream 继承关系
+
+```
+FileInputDStream
+	FlatMappedDStream
+		MappedDStream
+			ShuffledDStream
+				ForEachDStream
+```
+parent.getOrCompute(time) 调用 DStream 的getOrCompute 根据 time 返回 RDD , 最后调用到 FileInputDStream 的 compute 方法，FileInputDStream 中的compute 方法实现比较简单，找到目录下新增的文件，把每个文件转成RDD 最后合并到一起。 如果是继承自ReceiverInputDStream 的 InputStream 会调用 ReceiverInputDStream 中的 compute 方法。
+
+由于使用 KafkaInputDStream 的情况比较多,所以分析 ReceiverInputDStream 中 compute 方法 , 调用 ReceiverTracker 中的 getBlocksOfBatch 获取到这段时间内从所有的ReceiverBlockInfo, 最后生成 BlockRDD , 改 RDD 的分区是通过有多少的 BlockId 确定的
+
+```
+ val receiverTracker = ssc.scheduler.receiverTracker
+        val blockInfos = receiverTracker.getBlocksOfBatch(validTime).getOrElse(id, Seq.empty)
+        val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
+
+        // Register the input blocks information into InputInfoTracker
+        val inputInfo = InputInfo(id, blockInfos.flatMap(_.numRecords).sum)
+        ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
+
+```
+
+
+3.调用 jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToNumRecords)) 提交生成的jobs 到 JobScheduler 上。把 Job 封装成 JobHandler 在 JobExecutor(线程池) 中执行。 放入 JobScheduler 定义的eventloop 后,主要是用来记录job 运行的时间。最后调用 Job 的run 方法执行。在job run 执行之后 就是 RDD 的 执行逻辑了。
 
 ```
 private class JobHandler(job: Job) extends Runnable with Logging {
