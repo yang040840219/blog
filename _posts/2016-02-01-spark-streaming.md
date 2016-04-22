@@ -98,7 +98,9 @@ def foreachRDD(foreachFunc: (RDD[T], Time) => Unit): Unit = ssc.withScope {
 
 ```
 
-最终创建 ForEachDStream 注册到 DStreamGraph 的 OutputStream 上。 注意用法就好！
+最终创建 ForEachDStream 调用 register 方法 注册到 DStreamGraph 的 OutputStream 上。
+
+注意用法就好！
 
 ```
 dstream.foreachRDD { rdd =>
@@ -354,9 +356,70 @@ private class JobHandler(job: Job) extends Runnable with Logging {
 
 #### Checkpoint
 
+##### 执行 checkpoint 操作
+
+JobGenerator 在提交job之后，会在 eventLoop 中 插入 DoCheckpoint 事件，进而调用doCheckpoint 方法。
+
+```
+ private def doCheckpoint(time: Time, clearCheckpointDataLater: Boolean) {
+    if (shouldCheckpoint && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
+      logInfo("Checkpointing graph for time " + time)
+      ssc.graph.updateCheckpointData(time)
+      checkpointWriter.write(new Checkpoint(ssc, time), clearCheckpointDataLater)
+    }
+  }
+  
+```
+在 graph 中的 updateCheckpointData 方法中会调用每个OutputStream 执行 updateCheckpointData 方法。由于每个DStream 在创建的时候都有一个 DStreamCheckpointData 对象对应，调用 checkpointData.update(currentTime) 方法。
+
+```
+checkpointWriter.write(new Checkpoint(ssc, time), clearCheckpointDataLater)
+``` 
+最后把time 时间的 Checkpoint(就是当前的StreamingContext对象) 写入到 checkpoint 的 目录下
 
 
+##### 从 checkpoint 目录中恢复  StreamingContext
 
 
+```
+val checkpointDirectory = "/Users/yxl/data/spark-streaming/checkpoint"
+    val targetDir = "/Users/yxl/data/spark-streaming/data"
+    val ssc = StreamingContext.getOrCreate(checkpointDirectory,
+      () => {
+        createContext(targetDir, checkpointDirectory)
+      })
+
+ssc.start()
+ssc.awaitTermination()
+
+```
+
+1.从 checkpoint 目录反序列化生成 StreamingContext 过程
+ 
+涉及到 SparkContext 创建, DStreamGraph 的创建
+   
+```
+  SparkContext.getOrCreate(cp_.createSparkConf()) 
+  
+  cp_.graph.setContext(this)
+  cp_.graph.restoreCheckpointData()
+  cp_.graph
+```
+
+StreamingContext.getOrCreate 会通过 CheckpointReader 读取 checkpointDir 下的  checkpoint-xxx 文件，反序列化出 Checkpoint 对象，然后通过 Checkpoint 对象创建 SparkContext、StreamingContext 设置 DStreamGraph 中的 InputStream 和 OutputStream 的 context 对象为新创建 的 StreamingContext
+
+2.DStreamGraph 
+
+DStreamGraph 的 restoreCheckpointData() 会对所有的OutputStream 执行restoreCheckpointData() 操作，调用DStreamCheckpointData （每个Dstream 在创建时都会创建）的 restore() 操作 会把保存的checkpoint files 转换成 CheckpointRDD 添加到 generateRdds 中。处理接收到通过DStream保存的，还没有转换成Block的数据
 
 
+执行 StreamingContext 的 start 方法之后
+
+
+3.ReceiverTracker
+
+ReceiverBlockTracker 会恢复  checkpoint 目录中 receivedBlockMetadata 目录下的数据（这些都是Block 数据），处理已经转换成Block的数据。BlockAdditionEvent、BatchAllocationEvent、BatchCleanupEvent 三种类型的事件
+
+4.JobGenerator
+
+获取最后一次checkpoint 的时间，会把从checkpoint 到现在的时间根据时间间隔生成job，然后把job 提交给集群运行
