@@ -1,8 +1,8 @@
 ---
 layout: post
 title: spark schedule
-tags:  [TaskScheduler]
-categories: [TaskScheduler]
+tags:  [Spark TaskScheduler]
+categories: [Spark]
 author: mingtian
 excerpt: "spark"
 ---

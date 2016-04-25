@@ -1,8 +1,8 @@
 ---
 layout: post
 title: Spark ShuffleManager
-tags:  [spark]
-categories: [spark]
+tags:  [Spark]
+categories: [Spark]
 author: mingtian
 excerpt: "Spark ShuffleManager"
 ---

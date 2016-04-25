@@ -1,8 +1,8 @@
 ---
 layout: post
 title: Spark run unit snappy exception
-tags:  [spark]
-categories: [spark]
+tags:  [Spark]
+categories: [Spark]
 author: mingtian
 excerpt: "Spark run unit snappy exception"
 ---

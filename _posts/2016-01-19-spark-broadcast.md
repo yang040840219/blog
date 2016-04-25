@@ -1,8 +1,8 @@
 ---
 layout: post
 title: spark broadcast
-tags:  [broadcast]
-categories: [broadcast]
+tags:  [Spark Broadcast]
+categories: [Spark]
 author: mingtian
 excerpt: "spark"
 ---
