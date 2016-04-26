@@ -29,8 +29,6 @@ spark.version : 1.4
 
 1. 创建 DStreamGraph 如果有 Checkpoint 则从 Checkpoint 目录启动
 2. 创建 JobScheduler
-3. 创建 ContextWaiter
-4. 创建 StreamingSource
 
 调用 start 方法后 主要是执行 JobScheduler 的 start 方法
 
@@ -354,6 +352,35 @@ private class JobHandler(job: Job) extends Runnable with Logging {
 
 ```
 
+
+#### ReceiverSupervisor
+
+监控运行在worker 上的 Receiver , 提供处理Receiver 接收到的数据的方法。 
+
+Receiver 使用普通的 KafkaReceiver  带有  WAL 的  ReliableKafkaReceiver 后续分析
+
+在 worker 上执行如下代码：
+
+```
+  val receiver = iterator.next()
+  val supervisor = new ReceiverSupervisorImpl(
+          receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
+  supervisor.start() // 启动 BlockGenerator
+  supervisor.awaitTermination()
+```
+
+
+数据接收保存流程
+
+KafkaReceiver.store() -> Receiver.store() -> ReceiverSupervisor.pushSingle(dataItem) 
+ -> BlockGenerator.addData(data) -> ReceiverSupervisor.pushArrayBuffer(arrayBuffer, None, Some(blockId))
+ -> ReceivedBlockHandler.store(block) -> 通过 RPC 发送事件  AddBlcok , ReceiverTracker.addBlock() -> ReceivedBlockTracker.addBlock(ReceivedBlockInfo)
+ 
+BlockGenerator 的 作用是把Receiver接收到的数据转换成Block，把生成的Block通过listener 的方式给ReceiverSupervisor 。 在 
+spark.streaming.blockInterval 的时间周期内把从Receiver 接收到的批量数据生成Block 。 BlockGenerator 会启动两个线程 一个用来把接收到的批量数据转换成Block (这个操作是通过 RecurringTimer 工具类控制实现的)，另外一个线程把生成的Block 通过 BlockManager 保存起来。
+BlockGenerator.addData(data) ->  会把数据放到缓冲区中 currentBuffer ， 默认情况下 200ms 为周期 调用 updateCurrentBuffer 方法，用 currentBuffer 中的数据生成一个Block，并将currentBuffer 清空。 生成的 Block 会被放入 ArrayBlockingQueue 队列，队列的长度默认是 10 ，通过 blockPushingThread 线程消费队列中的数据 -> listener.onPushBlock(block.id, block.buffer) 次listener 是在 ReceiverSupervisor 中定义的 ->  ReceiverSupervisor.pushArrayBuffer(arrayBuffer, None, Some(blockId)) -> ReceiverSupervisor.pushAndReportBlock
+
+
 #### Checkpoint
 
 ##### 执行 checkpoint 操作
@@ -370,6 +397,7 @@ JobGenerator 在提交job之后，会在 eventLoop 中 插入 DoCheckpoint 事�
   }
   
 ```
+
 在 graph 中的 updateCheckpointData 方法中会调用每个OutputStream 执行 updateCheckpointData 方法。由于每个DStream 在创建的时候都有一个 DStreamCheckpointData 对象对应，调用 checkpointData.update(currentTime) 方法。
 
 ```
