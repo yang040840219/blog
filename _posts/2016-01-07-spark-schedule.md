@@ -11,7 +11,7 @@ excerpt: "spark"
 * 在 Standalone 模式下
 
 
-###spark 调度器
+### spark 调度器
 
 
 PROCESS-LOCAL: 数据在同一个 JVM 中，即同一个 executor 上。这是最佳数据 locality。
