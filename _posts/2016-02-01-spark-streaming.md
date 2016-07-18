@@ -49,7 +49,7 @@ newGraph
 StreamingContext 初始化 DStreamGraph 时 会传递一个 batchDuration。
 DStreamGraph 持有所有的 InputStream 和 OutputStream 
 
-InputStream 是在代码, 中创建 InputDStream的子类时在父类调用 ssc.graph.addInputStream(this) 时 添加的。 同样每个 InputDStream 也会持有 DStreamGraph 的引用 
+InputStream 是在代码中创建 InputDStream的子类时在父类调用 ssc.graph.addInputStream(this) 时 添加的。 同样每个 InputDStream 也会持有 DStreamGraph 的引用 
 
 ```
  def addInputStream(inputStream: InputDStream[_]) {
@@ -278,7 +278,7 @@ private def generateJobs(time: Time) {
 ```
 
 
-2.graph.generateJobs(time) 针对每个注册的 OutputStream 执行 DStream 的子类会重写这个方法，比如 ForEachDStream 生成一个job
+2.graph.generateJobs(time) 针对每个注册的 OutputStream , 调用其 generateJob(time) 方法， DStream 的子类会重写这个方法，比如 ForEachDStream 生成一个job
 
 ```
  override def generateJob(time: Time): Option[Job] = {
@@ -311,9 +311,11 @@ FileInputDStream
 			ShuffledDStream
 				ForEachDStream
 ```
-parent.getOrCompute(time) 调用 DStream 的getOrCompute 根据 time 返回 RDD , 最后调用到 FileInputDStream 的 compute 方法，FileInputDStream 中的compute 方法实现比较简单，找到目录下新增的文件，把每个文件转成RDD 最后合并到一起。 如果是继承自ReceiverInputDStream 的 InputStream 会调用 ReceiverInputDStream 中的 compute 方法。
+parent.getOrCompute(time) 调用 DStream 的getOrCompute 根据 time 返回 RDD , 最后调用到 实现ReceiverInputDStream 的 FileInputDStream 类的 compute 方法，FileInputDStream 中的compute 方法实现比较简单，找到目录下新增的文件，把每个文件转成RDD 最后合并到一起。 如果是继承自ReceiverInputDStream 的 InputStream 会调用 ReceiverInputDStream 中的 compute 方法。
 
-由于使用 KafkaInputDStream 的情况比较多,所以分析 ReceiverInputDStream 中 compute 方法 , 调用 ReceiverTracker 中的 getBlocksOfBatch 获取到这段时间内从所有的ReceiverBlockInfo, 最后生成 BlockRDD , 改 RDD 的分区是通过有多少的 BlockId 确定的
+由于使用 KafkaInputDStream 的情况比较多,所以分析 ReceiverInputDStream 中 compute 方法 , 调用 ReceiverTracker 中的 getBlocksOfBatch 获取到这段时间内从所有的ReceiverBlockInfo, 最后生成 BlockRDD , 该 RDD 的分区是通过有多少的 BlockId 确定的。
+
+此时，相当于用在batch内生成的RDD 和 通过最终 action 定义的 func 生成一个新的job。
 
 ```
  val receiverTracker = ssc.scheduler.receiverTracker
@@ -327,7 +329,7 @@ parent.getOrCompute(time) 调用 DStream 的getOrCompute 根据 time 返回 RDD 
 ```
 
 
-3.调用 jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToNumRecords)) 提交生成的jobs 到 JobScheduler 上。把 Job 封装成 JobHandler 在 JobExecutor(线程池) 中执行。 放入 JobScheduler 定义的eventloop 后,主要是用来记录job 运行的时间。最后调用 Job 的run 方法执行。在job run 执行之后 就是 RDD 的 执行逻辑了。
+3.对于成功生成的Job，调用 jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToNumRecords)) 提交生成的jobs 到 JobScheduler 上。把 Job 封装成 JobHandler 在 JobExecutor(线程池) 中执行。 放入 JobScheduler 定义的eventloop 后,主要是用来记录job 运行的时间。最后调用 Job 的run 方法执行。在job run 执行之后 就是 RDD 的 执行逻辑了。
 
 ```
 private class JobHandler(job: Job) extends Runnable with Logging {
@@ -450,4 +452,40 @@ ReceiverBlockTracker 会恢复  checkpoint 目录中 receivedBlockMetadata 目�
 
 4.JobGenerator
 
-获取最后一次checkpoint 的时间，会把从checkpoint 到现在的时间根据时间间隔生成job，然后把job 提交给集群运行
+获取最后一次checkpoint 的时间，会把从checkpoint 到现在的时间根据时间间隔生成job，交给 JobScheduler 最后提交给集群运行
+
+
+
+#### 数据清理
+
+##### 1.清除元数据(接收到的Block信息)
+
+当 Job 运行完成时，会产生一个 JobStarted 事件，JobScheduler 中handleJobCompletion(job) 方法处理，其中会调用 JobGenerator 中的 onBatchCompletion(time)
+
+```
+ def onBatchCompletion(time: Time) {
+    eventLoop.post(ClearMetadata(time))
+  }
+```
+调用  ssc.graph.clearMetadata(time) 来清理生成的RDD 信息 ， unpersist rdd ，移除RDD 的block
+
+##### 2.清除checkpointData
+
+在 清除Metadata 时 , 判断有没有进行checkpoint ，如果有进行清理
+
+```
+ if (shouldCheckpoint) {
+      eventLoop.post(DoCheckpoint(time, clearCheckpointDataLater = true))
+    }
+```
+
+调用  clearCheckpointData(time: Time) 方法
+
+```
+ssc.graph.clearCheckpointData(time)
+```
+
+在DStream 上执行 clearCheckPointData , 最后DStreamCheckpointData 调用 cleanup(time)
+删除小于lastCheckpointFileTime 的 checkpoint 文件
+
+
